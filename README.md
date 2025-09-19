@@ -2,5 +2,5 @@
 # Group - SkyNet
 ## Group Members
 - 220332P - Kularathna A. K. D. D. D. - DilshanKularathna(GitHub)
-- 220605G - Shaluka T. D. L. - deshan0(GitHub)
-- 220648N - Thrimanna K. D. D.
+- 220605G - Shaluka T. D. L. 
+- 220648N - Thrimanna K. D. D. - deshan0(GitHub)
