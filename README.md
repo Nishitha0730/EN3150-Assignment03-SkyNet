@@ -12,4 +12,5 @@
 ### AlexNet Architecture
 
 <!-- ![AlexNet_Architecture.png](attachment:AlexNet_Architecture.png) -->
-![Figure 1: AlexNet_Architecture](AlexNet\AlexNet_Architecture.png)  
+![Figure 1: AlexNet_Architecture](AlexNet/AlexNet_Architecture.png)  
+*AlexNet Architecture*
