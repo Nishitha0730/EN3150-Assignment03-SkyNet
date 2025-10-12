@@ -10,5 +10,5 @@
 # Task 02
 ## AlexNet Implementation - 220332P
 ### AlexNet Architecture
-![Diagram showing the architecture of AlexNet, a convolutional neural network. The diagram illustrates multiple layers including input, convolutional layers, pooling layers, fully connected layers, and output layer. Each layer is labeled with its type and parameters such as filter size and number of filters. The environment is a technical schematic with a neutral tone, focusing on the structure and flow of data through the network. Text in the image includes labels for each layer and their specifications.]
+
 ![AlexNet_Architecture.png](attachment:AlexNet_Architecture.png)
