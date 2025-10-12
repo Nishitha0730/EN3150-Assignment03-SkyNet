@@ -1,5 +1,5 @@
 # Ignore large model files
-AlexNet/*.pth
+*.pth
 
 # Ignore Python cache files
 __pycache__/
