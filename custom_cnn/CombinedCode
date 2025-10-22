@@ -1,0 +1,183 @@
+# @title Default title text
+# ==========================================
+# EN3150 Assignment 03 - CNN & Transfer Learning
+# Combined code for Google Colab
+# ==========================================
+
+# --- Install packages (if not already installed) ---
+!pip install tensorflow matplotlib scikit-learn pillow -q
+
+# --- Imports ---
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, classification_report
+import itertools
+from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from tensorflow.keras import layers, models, optimizers, applications
+from tensorflow.keras.utils import to_categorical
+
+# ==========================================
+# Utility functions (from utils.py)
+# ==========================================
+
+def load_mnist_flat():
+    """Load MNIST dataset, normalize, and split 70/15/15."""
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    X = np.concatenate([x_train, x_test], axis=0)
+    y = np.concatenate([y_train, y_test], axis=0)
+    X = X.astype("float32") / 255.0
+    X = np.expand_dims(X, -1)
+
+    X_train, X_rest, y_train, y_rest = train_test_split(X, y, train_size=0.7, stratify=y, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(X_rest, y_rest, train_size=0.5, stratify=y_rest, random_state=42)
+
+    y_train_o = to_categorical(y_train, num_classes=10)
+    y_val_o = to_categorical(y_val, num_classes=10)
+    y_test_o = to_categorical(y_test, num_classes=10)
+    return X_train, X_val, X_test, y_train_o, y_val_o, y_test_o, y_train, y_val, y_test
+
+def plot_history(history, title_prefix=""):
+    plt.figure(figsize=(12,4))
+    plt.subplot(1,2,1)
+    plt.plot(history.history['loss'], label='train loss')
+    plt.plot(history.history.get('val_loss', []), label='val loss')
+    plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend(); plt.title(f'{title_prefix} Loss')
+
+    plt.subplot(1,2,2)
+    plt.plot(history.history.get('accuracy', history.history.get('acc')), label='train acc')
+    plt.plot(history.history.get('val_accuracy', history.history.get('val_acc')), label='val acc')
+    plt.xlabel('Epoch'); plt.ylabel('Accuracy'); plt.legend(); plt.title(f'{title_prefix} Accuracy')
+    plt.tight_layout()
+    plt.show()
+
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    plt.figure(figsize=(7,6))
+    if normalize:
+        cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-9)
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+    plt.ylabel('True label'); plt.xlabel('Predicted label'); plt.tight_layout(); plt.show()
+
+def evaluate_and_report(model, X_test, y_test_o, y_test_raw, class_names=None):
+    loss, acc = model.evaluate(X_test, y_test_o, verbose=0)
+    print(f"Test loss: {loss:.4f}  |  Test accuracy: {acc:.4f}")
+    y_pred_proba = model.predict(X_test)
+    y_pred = y_pred_proba.argmax(axis=1)
+    print("\nClassification report:")
+    print(classification_report(y_test_raw, y_pred, digits=4))
+    cm = confusion_matrix(y_test_raw, y_pred)
+    plot_confusion_matrix(cm, classes=class_names or list(range(cm.shape[0])))
+
+# ==========================================
+# Custom CNN (from custom_cnn.py)
+# ==========================================
+
+def build_simple_cnn(input_shape=(28,28,1), num_classes=10, dropout_rate=0.5):
+    model = models.Sequential([
+        layers.Conv2D(32, (3,3), activation='relu', input_shape=input_shape),
+        layers.MaxPooling2D((2,2)),
+        layers.Conv2D(64, (3,3), activation='relu'),
+        layers.MaxPooling2D((2,2)),
+        layers.Flatten(),
+        layers.Dense(128, activation='relu'),
+        layers.Dropout(dropout_rate),
+        layers.Dense(num_classes, activation='softmax')
+    ])
+    return model
+
+def run_custom_cnn():
+    X_train, X_val, X_test, y_train_o, y_val_o, y_test_o, y_train_raw, y_val_raw, y_test_raw = load_mnist_flat()
+    input_shape = X_train.shape[1:]
+
+    optimizers_to_try = {
+        'Adam': optimizers.Adam(learning_rate=1e-3),
+        'SGD': optimizers.SGD(learning_rate=1e-2),
+        'SGD_momentum': optimizers.SGD(learning_rate=1e-2, momentum=0.9)
+    }
+
+    for name, opt in optimizers_to_try.items():
+        print(f"\n=== Training with optimizer: {name} ===")
+        model = build_simple_cnn(input_shape=input_shape)
+        model.compile(optimizer=opt, loss='categorical_crossentropy', metrics=['accuracy'])
+        history = model.fit(X_train, y_train_o,
+                            epochs=5,  # reduce to 5 for Colab speed; can increase to 20
+                            batch_size=128,
+                            validation_data=(X_val, y_val_o),
+                            verbose=2)
+        plot_history(history, title_prefix=f'CustomCNN - {name}')
+        evaluate_and_report(model, X_test, y_test_o, y_test_raw)
+
+# ==========================================
+# Transfer Learning (from transfer_learning.py)
+# ==========================================
+
+def preprocess_for_vgg(X):
+    X_resized = tf.image.resize(X, [48,48]).numpy()
+    X_rgb = np.concatenate([X_resized, X_resized, X_resized], axis=-1)
+    X_rgb = applications.vgg16.preprocess_input(X_rgb * 255.0)
+    return X_rgb
+
+def build_finetune_vgg(input_shape=(48,48,3), num_classes=10, dropout_rate=0.5):
+    base = applications.VGG16(weights='imagenet', include_top=False, input_shape=input_shape)
+    base.trainable = False
+    x = layers.Flatten()(base.output)
+    x = layers.Dense(256, activation='relu')(x)
+    x = layers.Dropout(dropout_rate)(x)
+    out = layers.Dense(num_classes, activation='softmax')(x)
+    model = models.Model(base.input, out)
+    return model, base
+
+def run_transfer_learning():
+    X_train, X_val, X_test, y_train_o, y_val_o, y_test_o, y_train_raw, y_val_raw, y_test_raw = load_mnist_flat()
+    X_train_p = preprocess_for_vgg(X_train)
+    X_val_p = preprocess_for_vgg(X_val)
+    X_test_p = preprocess_for_vgg(X_test)
+
+    model, base = build_finetune_vgg(input_shape=X_train_p.shape[1:])
+    model.compile(optimizer=optimizers.Adam(1e-4), loss='categorical_crossentropy', metrics=['accuracy'])
+
+    print("\n--- Training VGG16 (frozen base) ---")
+    history1 = model.fit(X_train_p, y_train_o, validation_data=(X_val_p, y_val_o),
+                         epochs=3, batch_size=64, verbose=2)
+
+    for layer in base.layers[-4:]:
+        layer.trainable = True
+
+    model.compile(optimizer=optimizers.SGD(learning_rate=1e-4, momentum=0.9),
+                  loss='categorical_crossentropy', metrics=['accuracy'])
+
+    print("\n--- Fine-tuning last layers ---")
+    history2 = model.fit(X_train_p, y_train_o, validation_data=(X_val_p, y_val_o),
+                         epochs=3, batch_size=64, verbose=2)
+
+    # Combine histories
+    combined = {'loss': history1.history['loss'] + history2.history['loss'],
+                'val_loss': history1.history['val_loss'] + history2.history['val_loss'],
+                'accuracy': history1.history['accuracy'] + history2.history['accuracy'],
+                'val_accuracy': history1.history['val_accuracy'] + history2.history['val_accuracy']}
+    plot_history(type('hist', (), {'history': combined})(), title_prefix='VGG16 Fine-tune')
+    evaluate_and_report(model, X_test_p, y_test_o, y_test_raw)
+
+# ==========================================
+# Run both parts
+# ==========================================
+
+print("Running Custom CNN (Part 1)")
+run_custom_cnn()
+
+print("Running Transfer Learning (Part 2 - VGG16)")
+run_transfer_learning()
